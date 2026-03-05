@@ -1,0 +1,1328 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>FlashFunds</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+    :root{
+      --bg:#0a0c0f;
+      --surface:#111418;
+      --s2:#181d24;
+      --s3:#1e242e;
+      --border:rgba(255,255,255,0.07);
+      --green:#00f57a;
+      --green-dim:rgba(0,245,122,0.10);
+      --green-glow:rgba(0,245,122,0.28);
+      --blue:#3b9eff;
+      --blue-dim:rgba(59,158,255,0.10);
+      --blue-glow:rgba(59,158,255,0.25);
+      --text:#f0f4f8;
+      --muted:#5a6478;
+      --sub:#8b95a8;
+      --pending:#f5a623;
+      --danger:#ff4757;
+    }
+
+    body{
+      font-family:'Syne',sans-serif;
+      background:#060810;
+      min-height:100vh;
+      display:flex;align-items:center;justify-content:center;
+      padding:20px;
+      position:relative;
+      overflow-x:hidden;
+    }
+
+    /* Gradient mesh canvas sits behind everything */
+    #meshCanvas{
+      position:fixed;
+      inset:0;
+      width:100%;height:100%;
+      z-index:0;
+      pointer-events:none;
+    }
+
+    /* Card sits above canvas */
+    .card{
+      position:relative;
+      z-index:1;
+    }
+
+    /* ─── MAIN CARD ─────────────────────────────────────────── */
+    .card{
+      background:rgba(14,17,22,0.82);
+      backdrop-filter:blur(24px);
+      -webkit-backdrop-filter:blur(24px);
+      border:1px solid rgba(255,255,255,0.09);
+      border-radius:24px;
+      width:100%;max-width:400px;
+      overflow:hidden;
+      box-shadow:0 0 0 1px rgba(255,255,255,0.04), 0 40px 80px rgba(0,0,0,0.5);
+      animation:cardIn .6s cubic-bezier(.22,1,.36,1) both;
+    }
+    @keyframes cardIn{from{opacity:0;transform:translateY(24px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+    /* ─── HEADER ─────────────────────────────────────────────── */
+    .card-header{
+      padding:18px 20px;
+      border-bottom:1px solid var(--border);
+      display:flex;align-items:center;gap:12px;
+    }
+
+    /* Profile trigger button — top left */
+    .profile-trigger{
+      width:38px;height:38px;
+      border-radius:12px;
+      border:none;cursor:pointer;
+      background:var(--s2);
+      border:1px solid var(--border);
+      display:flex;align-items:center;justify-content:center;
+      flex-shrink:0;
+      transition:all .15s;
+      position:relative;
+    }
+    .profile-trigger:hover{background:var(--s3);border-color:rgba(255,255,255,0.12);}
+    .profile-trigger:active{transform:scale(.95);}
+
+    /* Avatar inside trigger — shows initials when profile set */
+    .trigger-avatar{
+      width:24px;height:24px;border-radius:7px;
+      background:var(--green-dim);
+      color:var(--green);
+      font-size:10px;font-weight:800;
+      display:flex;align-items:center;justify-content:center;
+      letter-spacing:0;
+    }
+    .trigger-avatar.empty{background:var(--s3);color:var(--muted);}
+
+    /* Profile set indicator dot */
+    .profile-dot{
+      position:absolute;top:6px;right:6px;
+      width:7px;height:7px;border-radius:50%;
+      background:var(--green);
+      border:2px solid var(--surface);
+      display:none;
+    }
+    .profile-dot.visible{display:block;}
+
+    .brand{
+      flex:1;
+      font-size:1rem;font-weight:800;letter-spacing:-.02em;
+      color:var(--text);
+      display:flex;align-items:center;gap:8px;
+    }
+
+    .brand-icon{
+      width:28px;height:28px;background:var(--green);border-radius:8px;
+      display:flex;align-items:center;justify-content:center;font-size:14px;
+    }
+
+    .demo-pill{
+      background:rgba(0,245,122,.08);
+      border:1px solid rgba(0,245,122,.2);
+      color:var(--green);
+      padding:4px 10px;border-radius:100px;
+      font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+      font-family:'DM Mono',monospace;
+    }
+
+    /* ─── BALANCE ─────────────────────────────────────────────── */
+    .balance-section{padding:26px 24px 18px;}
+
+    .bal-label{
+      font-family:'DM Mono',monospace;font-size:10px;
+      letter-spacing:.12em;text-transform:uppercase;
+      color:var(--muted);margin-bottom:8px;
+    }
+
+    .bal-row{display:flex;align-items:baseline;gap:4px;margin-bottom:4px;overflow:hidden;max-width:100%;}
+
+    .cur{font-size:1.2rem;font-weight:700;color:var(--sub);line-height:1;flex-shrink:0;}
+
+    .bal-amt{
+      font-size:3rem;font-weight:800;letter-spacing:-.04em;
+      color:var(--text);line-height:1;
+      transition:color .4s cubic-bezier(.22,1,.36,1), text-shadow .4s;
+      white-space:nowrap;
+      min-width:0;
+      display:block;
+    }
+    .bal-amt.pulse{color:var(--green);text-shadow:0 0 30px var(--green-glow);}
+
+    .bal-sub{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);margin-top:6px;}
+
+    /* ─── ACTION BUTTONS ─────────────────────────────────────── */
+    .actions{
+      padding:0 24px 22px;
+      display:grid;grid-template-columns:1fr 1fr auto;gap:10px;
+    }
+
+    .btn-act{
+      border:none;cursor:pointer;
+      font-family:'Syne',sans-serif;font-weight:700;font-size:.85rem;
+      border-radius:14px;padding:14px 10px;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+      transition:all .15s;
+    }
+    .btn-act:active{transform:scale(.96);}
+
+    .btn-act .ico{
+      width:32px;height:32px;border-radius:10px;
+      display:flex;align-items:center;justify-content:center;font-size:16px;
+    }
+
+    .btn-add{background:var(--green-dim);border:1px solid rgba(0,245,122,.2);color:var(--green);}
+    .btn-add .ico{background:rgba(0,245,122,.15);}
+    .btn-add:hover{background:rgba(0,245,122,.16);border-color:rgba(0,245,122,.4);}
+
+    .btn-send{background:var(--blue-dim);border:1px solid rgba(59,158,255,.2);color:var(--blue);}
+    .btn-send .ico{background:rgba(59,158,255,.15);}
+    .btn-send:hover{background:rgba(59,158,255,.16);border-color:rgba(59,158,255,.4);}
+    .btn-send.locked{
+      background:var(--s2);border:1px solid var(--border);
+      color:var(--muted);cursor:not-allowed;opacity:0.6;
+    }
+    .btn-send.locked .ico{background:rgba(255,255,255,.05);}
+
+    .btn-reset{
+      padding:14px;background:var(--s2);
+      border:1px solid var(--border);border-radius:14px;
+      color:var(--sub);cursor:pointer;transition:all .15s;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .btn-reset:hover{color:var(--text);background:var(--s3);}
+
+    /* ─── TRANSACTIONS ───────────────────────────────────────── */
+    .tx-section{border-top:1px solid var(--border);}
+
+    .tx-header{
+      padding:14px 24px 10px;
+      display:flex;justify-content:space-between;align-items:center;
+    }
+
+    .tx-title{
+      font-family:'DM Mono',monospace;font-size:10px;
+      letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+    }
+
+    .tx-count{
+      font-family:'DM Mono',monospace;font-size:10px;
+      color:var(--green);background:var(--green-dim);
+      padding:3px 8px;border-radius:100px;
+    }
+
+    .tx-list{
+      max-height:300px;overflow-y:auto;
+      padding:0 24px 24px;
+      scrollbar-width:thin;scrollbar-color:var(--s2) transparent;
+    }
+    .tx-list::-webkit-scrollbar{width:4px;}
+    .tx-list::-webkit-scrollbar-thumb{background:var(--s2);border-radius:4px;}
+
+    .tx-empty{text-align:center;padding:30px 0;color:var(--muted);font-size:.85rem;}
+    .tx-empty-ico{font-size:2rem;margin-bottom:10px;opacity:.3;}
+
+    .tx-item{
+      padding:13px 0;border-bottom:1px solid var(--border);
+      cursor:pointer;
+      animation:txIn .35s cubic-bezier(.22,1,.36,1) both;
+    }
+    .tx-item:last-child{border-bottom:none;}
+    @keyframes txIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+
+    .tx-row{display:flex;align-items:center;gap:12px;}
+
+    .tx-ico{
+      width:38px;height:38px;border-radius:10px;
+      display:flex;align-items:center;justify-content:center;
+      font-size:14px;font-weight:800;flex-shrink:0;
+    }
+    .ico-add{background:var(--green-dim);color:var(--green);}
+    .ico-send{background:var(--blue-dim);color:var(--blue);}
+    .ico-pend{background:rgba(245,166,35,.1);color:var(--pending);font-size:16px;}
+
+    .tx-body{flex:1;min-width:0;}
+    .tx-name{font-size:.88rem;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .tx-sub2{font-size:.72rem;color:var(--sub);margin-top:2px;font-family:'DM Mono',monospace;}
+
+    .tx-right{text-align:right;flex-shrink:0;}
+    .tx-amt{font-family:'DM Mono',monospace;font-size:.9rem;font-weight:500;}
+    .credit{color:var(--green);}
+    .debit{color:var(--blue);}
+
+    .tx-st{font-family:'DM Mono',monospace;font-size:10px;margin-top:3px;}
+    .pend{color:var(--pending);}
+    .done{color:var(--muted);}
+
+    .tx-detail{max-height:0;overflow:hidden;transition:max-height .35s cubic-bezier(.22,1,.36,1);}
+    .tx-detail.open{max-height:180px;}
+
+    .tx-detail-inner{
+      margin-top:10px;background:var(--s2);border:1px solid var(--border);
+      border-radius:10px;padding:12px 14px;
+      display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;
+    }
+
+    .dl{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;}
+    .dv{font-size:.8rem;font-weight:600;color:var(--sub);}
+    .dfull{grid-column:1/-1;}
+
+    /* ─── SHARED MODAL BASE ──────────────────────────────────── */
+    .overlay{
+      position:fixed;inset:0;
+      background:rgba(0,0,0,.78);backdrop-filter:blur(10px);
+      display:flex;align-items:flex-end;justify-content:center;
+      z-index:100;
+      opacity:0;pointer-events:none;transition:opacity .2s;
+    }
+    .overlay.open{opacity:1;pointer-events:all;}
+
+    .sheet{
+      background:rgba(14,17,22,0.88);
+      backdrop-filter:blur(30px);
+      -webkit-backdrop-filter:blur(30px);
+      border:1px solid rgba(255,255,255,0.09);
+      border-radius:24px 24px 0 0;
+      padding:18px 24px 40px;
+      width:100%;max-width:440px;
+      transform:translateY(40px);
+      transition:transform .35s cubic-bezier(.22,1,.36,1);
+      box-shadow:0 -20px 60px rgba(0,0,0,.5);
+    }
+    .overlay.open .sheet{transform:translateY(0);}
+
+    .handle{width:36px;height:4px;background:var(--border);border-radius:4px;margin:0 auto 18px;}
+
+    .sh-title{font-size:1.1rem;font-weight:800;color:var(--text);margin-bottom:4px;letter-spacing:-.02em;}
+    .sh-sub{font-size:.82rem;color:var(--muted);margin-bottom:18px;}
+
+    .field{margin-bottom:13px;}
+    .flabel{
+      font-family:'DM Mono',monospace;font-size:10px;
+      letter-spacing:.1em;text-transform:uppercase;
+      color:var(--muted);margin-bottom:6px;display:block;
+    }
+
+    .finput{
+      width:100%;background:var(--s2);
+      border:1px solid var(--border);border-radius:12px;
+      padding:13px 14px;
+      font-family:'Syne',sans-serif;font-size:.92rem;font-weight:600;color:var(--text);
+      outline:none;transition:border-color .2s,box-shadow .2s;
+      appearance:none;
+    }
+    .finput:focus{border-color:var(--green);box-shadow:0 0 0 3px var(--green-dim);}
+    .finput.bf:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-dim);}
+    .finput::placeholder{color:var(--muted);font-weight:400;}
+    .finput.err{border-color:var(--danger)!important;box-shadow:0 0 0 3px rgba(255,71,87,.15)!important;}
+    .finput.mono{font-family:'DM Mono',monospace;font-weight:500;}
+
+    .pfx-w{position:relative;}
+    .pfx{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-family:'DM Mono',monospace;font-size:1rem;color:var(--sub);pointer-events:none;}
+    .pfx-w .finput{padding-left:28px;font-size:1.1rem;}
+
+    /* Bank dropdown */
+    .bank-btn{
+      width:100%;background:var(--s2);
+      border:1px solid var(--border);border-radius:12px;
+      padding:13px 14px;
+      display:flex;align-items:center;gap:10px;
+      cursor:pointer;transition:border-color .2s,box-shadow .2s;
+    }
+    .bank-btn:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-dim);}
+    .bank-btn .bl{flex:1;text-align:left;font-size:.92rem;font-weight:600;color:var(--muted);font-family:'Syne',sans-serif;}
+    .bank-btn .bl.on{color:var(--text);}
+    .bank-btn .cv{color:var(--muted);font-size:10px;}
+    .bank-btn.err{border-color:var(--danger)!important;}
+
+    .bank-drop{
+      background:var(--s2);border:1px solid var(--border);border-radius:12px;
+      margin-top:6px;max-height:0;overflow:hidden;
+      transition:max-height .3s cubic-bezier(.22,1,.36,1);
+    }
+    .bank-drop.open{max-height:220px;overflow-y:auto;}
+    .bank-drop::-webkit-scrollbar{width:4px;}
+    .bank-drop::-webkit-scrollbar-thumb{background:var(--s3);border-radius:4px;}
+
+    .bitem{
+      display:flex;align-items:center;gap:12px;
+      padding:11px 14px;cursor:pointer;
+      border-bottom:1px solid var(--border);transition:background .12s;
+    }
+    .bitem:last-child{border-bottom:none;}
+    .bitem:hover{background:var(--s3);}
+    .bitem.sel{background:var(--blue-dim);}
+    .bitem.sel-g{background:var(--green-dim);}
+
+    .blogo{width:28px;height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+
+    .bn{flex:1;font-size:.85rem;font-weight:600;color:var(--text);}
+    .bc{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);}
+
+    /* Quick amounts */
+    .quick{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px;}
+    .qbtn{
+      background:var(--s2);border:1px solid var(--border);border-radius:8px;
+      padding:5px 11px;font-family:'DM Mono',monospace;font-size:11px;
+      color:var(--sub);cursor:pointer;transition:all .15s;
+    }
+    .qbtn.g:hover{border-color:var(--green);color:var(--green);background:var(--green-dim);}
+    .qbtn.b:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-dim);}
+
+    /* Footer */
+    .mfoot{display:grid;gap:10px;margin-top:18px;}
+    .mfoot.two{grid-template-columns:auto 1fr;}
+
+    .btn-back2{
+      padding:13px 18px;background:var(--s2);border:1px solid var(--border);
+      border-radius:12px;color:var(--sub);
+      font-family:'Syne',sans-serif;font-weight:600;font-size:.88rem;
+      cursor:pointer;transition:all .15s;
+    }
+    .btn-back2:hover{color:var(--text);}
+    .btn-back2:active{transform:scale(.97);}
+
+    .btn-grn{
+      padding:14px 18px;background:var(--green);border:none;border-radius:12px;
+      color:#0a0c0f;font-family:'Syne',sans-serif;font-weight:800;font-size:.9rem;
+      cursor:pointer;transition:all .15s;
+      box-shadow:0 4px 20px var(--green-glow);letter-spacing:-.01em;
+    }
+    .btn-grn:hover{background:#1ffb82;}
+    .btn-grn:active{transform:scale(.97);}
+
+    .btn-blu{
+      padding:14px 18px;background:var(--blue);border:none;border-radius:12px;
+      color:#fff;font-family:'Syne',sans-serif;font-weight:800;font-size:.9rem;
+      cursor:pointer;transition:all .15s;
+      box-shadow:0 4px 20px var(--blue-glow);letter-spacing:-.01em;
+    }
+    .btn-blu:hover{background:#5fb3ff;}
+    .btn-blu:active{transform:scale(.97);}
+
+    /* Step dots */
+    .steps{display:flex;gap:6px;margin-bottom:18px;}
+    .sdot{height:3px;border-radius:3px;flex:1;background:var(--s3);transition:all .3s;}
+    .sdot.ag{background:var(--green);}
+    .sdot.ab{background:var(--blue);}
+    .sdot.dg{background:rgba(0,245,122,.35);}
+    .sdot.db{background:rgba(59,158,255,.35);}
+
+    .spanel{display:none;}
+    .spanel.on{display:block;}
+
+    /* ─── PROFILE PANEL (slide from left) ───────────────────── */
+    .profile-overlay{
+      position:fixed;inset:0;
+      background:rgba(0,0,0,.6);backdrop-filter:blur(8px);
+      z-index:200;
+      opacity:0;pointer-events:none;transition:opacity .25s;
+    }
+    .profile-overlay.open{opacity:1;pointer-events:all;}
+
+    .profile-panel{
+      position:absolute;top:0;left:0;bottom:0;
+      width:min(340px, 92vw);
+      background:rgba(14,17,22,0.88);
+      backdrop-filter:blur(30px);
+      -webkit-backdrop-filter:blur(30px);
+      border-right:1px solid rgba(255,255,255,0.09);
+      display:flex;flex-direction:column;
+      transform:translateX(-100%);
+      transition:transform .35s cubic-bezier(.22,1,.36,1);
+      box-shadow:20px 0 60px rgba(0,0,0,.5);
+    }
+    .profile-overlay.open .profile-panel{transform:translateX(0);}
+
+    /* Panel header */
+    .pp-header{
+      padding:20px 20px 18px;
+      border-bottom:1px solid var(--border);
+      display:flex;align-items:center;gap:14px;
+      flex-shrink:0;
+    }
+
+    .pp-close{
+      width:34px;height:34px;border-radius:10px;
+      background:var(--s2);border:1px solid var(--border);
+      color:var(--sub);font-size:14px;
+      display:flex;align-items:center;justify-content:center;
+      cursor:pointer;transition:all .15s;flex-shrink:0;
+    }
+    .pp-close:hover{color:var(--text);background:var(--s3);}
+
+    .pp-avatar{
+      width:42px;height:42px;border-radius:12px;
+      background:var(--green-dim);color:var(--green);
+      font-size:1rem;font-weight:800;
+      display:flex;align-items:center;justify-content:center;
+      flex-shrink:0;transition:all .3s;
+    }
+    .pp-avatar.empty{background:var(--s3);color:var(--muted);}
+
+    .pp-info{flex:1;min-width:0;}
+    .pp-name{font-size:.95rem;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .pp-bank{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:3px;}
+    .pp-acc{font-family:'DM Mono',monospace;font-size:10px;color:var(--sub);margin-top:2px;}
+
+    /* Panel body */
+    .pp-body{
+      flex:1;overflow-y:auto;padding:22px 20px;
+      scrollbar-width:thin;scrollbar-color:var(--s2) transparent;
+    }
+    .pp-body::-webkit-scrollbar{width:4px;}
+    .pp-body::-webkit-scrollbar-thumb{background:var(--s2);border-radius:4px;}
+
+    .pp-section-lbl{
+      font-family:'DM Mono',monospace;font-size:9px;
+      letter-spacing:.14em;text-transform:uppercase;
+      color:var(--muted);margin-bottom:14px;
+      padding-bottom:8px;border-bottom:1px solid var(--border);
+    }
+
+    .pp-field{margin-bottom:14px;}
+
+    .pp-flabel{
+      font-family:'DM Mono',monospace;font-size:10px;
+      letter-spacing:.1em;text-transform:uppercase;
+      color:var(--muted);margin-bottom:6px;display:block;
+    }
+
+    .pp-input{
+      width:100%;background:var(--s2);
+      border:1px solid var(--border);border-radius:12px;
+      padding:12px 14px;
+      font-family:'Syne',sans-serif;font-size:.9rem;font-weight:600;color:var(--text);
+      outline:none;transition:border-color .2s,box-shadow .2s;
+    }
+    .pp-input.mono{font-family:'DM Mono',monospace;font-weight:500;}
+    .pp-input:focus{border-color:var(--green);box-shadow:0 0 0 3px var(--green-dim);}
+    .pp-input::placeholder{color:var(--muted);font-weight:400;}
+
+    /* Profile bank button */
+    .pp-bank-btn{
+      width:100%;background:var(--s2);
+      border:1px solid var(--border);border-radius:12px;
+      padding:12px 14px;
+      display:flex;align-items:center;gap:10px;
+      cursor:pointer;transition:border-color .2s,box-shadow .2s;
+    }
+    .pp-bank-btn:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px var(--green-dim);}
+    .pp-bank-btn .pbl{flex:1;text-align:left;font-size:.9rem;font-weight:600;color:var(--muted);font-family:'Syne',sans-serif;}
+    .pp-bank-btn .pbl.on{color:var(--text);}
+    .pp-bank-btn .pcv{color:var(--muted);font-size:10px;}
+
+    .pp-bank-drop{
+      background:var(--s2);border:1px solid var(--border);border-radius:12px;
+      margin-top:6px;max-height:0;overflow:hidden;
+      transition:max-height .3s cubic-bezier(.22,1,.36,1);
+    }
+    .pp-bank-drop.open{max-height:220px;overflow-y:auto;}
+    .pp-bank-drop::-webkit-scrollbar{width:4px;}
+    .pp-bank-drop::-webkit-scrollbar-thumb{background:var(--s3);border-radius:4px;}
+
+    .pp-bitem{
+      display:flex;align-items:center;gap:12px;
+      padding:11px 14px;cursor:pointer;
+      border-bottom:1px solid var(--border);transition:background .12s;
+    }
+    .pp-bitem:last-child{border-bottom:none;}
+    .pp-bitem:hover{background:var(--s3);}
+    .pp-bitem.sel{background:var(--green-dim);}
+
+    .pp-save{
+      width:100%;padding:14px;
+      background:var(--green);border:none;border-radius:12px;
+      color:#0a0c0f;font-family:'Syne',sans-serif;font-weight:800;font-size:.9rem;
+      cursor:pointer;transition:all .15s;margin-top:6px;
+      box-shadow:0 4px 20px var(--green-glow);letter-spacing:-.01em;
+    }
+    .pp-save:hover{background:#1ffb82;}
+    .pp-save:active{transform:scale(.98);}
+
+    /* Toast */
+    .toast{
+      position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(20px);
+      background:var(--s2);border:1px solid var(--border);border-radius:100px;
+      padding:10px 20px;
+      font-family:'DM Mono',monospace;font-size:12px;color:var(--green);
+      box-shadow:0 8px 30px rgba(0,0,0,.4);
+      opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap;
+      z-index:999;
+    }
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+    /* Pending dot */
+    @keyframes shimmer{0%,100%{opacity:.3}50%{opacity:1}}
+    .pdot{width:6px;height:6px;border-radius:50%;background:var(--pending);display:inline-block;animation:shimmer 1.2s ease-in-out infinite;}
+
+    /* confirm box */
+    .cbox{background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:4px;}
+    .ctop{display:flex;align-items:center;gap:14px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border);}
+    .cavatar{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1rem;font-weight:800;}
+    .cavatar.g{background:var(--green-dim);color:var(--green);}
+    .cavatar.b{background:var(--blue-dim);color:var(--blue);}
+    .cname{font-size:.95rem;font-weight:700;color:var(--text);}
+    .cdetail{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);margin-top:3px;}
+    .crows{display:flex;flex-direction:column;gap:10px;}
+    .crow{display:flex;justify-content:space-between;align-items:baseline;}
+    .ck{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+    .cv2{font-size:.88rem;font-weight:600;color:var(--sub);text-align:right;max-width:60%;}
+    .cv2.big-g{font-family:'DM Mono',monospace;font-size:1.1rem;color:var(--green);font-weight:500;}
+    .cv2.big-b{font-family:'DM Mono',monospace;font-size:1.1rem;color:var(--blue);font-weight:500;}
+  </style>
+</head>
+<body>
+
+<!-- ══ MAIN CARD ══════════════════════════════════════════════ -->
+<canvas id="meshCanvas"></canvas>
+
+<div class="card">
+
+  <div class="card-header">
+    <!-- Profile trigger — top left -->
+    <button class="profile-trigger" id="profileTrigger" title="Profile & Settings">
+      <div class="trigger-avatar empty" id="triggerAvatar">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="profile-dot" id="profileDot"></div>
+    </button>
+
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      FlashFunds
+    </div>
+    <div class="demo-pill" style="background:rgba(255,71,87,0.10);border:1px solid rgba(255,71,87,0.3);color:#ff4757;">🔴 Live</div>
+  </div>
+
+  <div class="balance-section">
+    <div class="bal-label">Available Balance</div>
+    <div class="bal-row">
+      <span class="cur">₦</span>
+      <span class="bal-amt" id="balance">0.00</span>
+    </div>
+    <div class="bal-sub" id="balanceSub">No recent activity</div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-act btn-add" id="openAdd">
+      <div class="ico">＋</div>
+      Add Funds
+    </button>
+    <button class="btn-act btn-send locked" id="openSend">
+      <div class="ico" id="sendIco">🔒</div>
+      <span id="sendBtnLabel">Send Money</span>
+    </button>
+    <button class="btn-reset" id="resetBtn" title="Reset">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M2 8a6 6 0 1 0 1.5-4M2 4v4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="tx-section">
+    <div class="tx-header">
+      <span class="tx-title">Recent Activity</span>
+      <span class="tx-count" id="txCount">0</span>
+    </div>
+    <div class="tx-list" id="txList">
+      <div class="tx-empty"><div class="tx-empty-ico">💳</div><div>No activity yet</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ADD FUNDS SHEET ════════════════════════════════════════ -->
+<div class="overlay" id="addOverlay">
+  <div class="sheet">
+    <div class="handle"></div>
+    <div class="sh-title">Add Funds</div>
+    <div class="sh-sub">Top up your FlashFunds balance.</div>
+
+    <div class="field">
+      <label class="flabel">Amount</label>
+      <div class="pfx-w">
+        <span class="pfx">₦</span>
+        <input type="number" class="finput mono" id="addAmt" placeholder="0.00" min="1" step="any"/>
+      </div>
+      <div class="quick">
+        <button class="qbtn g" data-v="5000">5K</button>
+        <button class="qbtn g" data-v="10000">10K</button>
+        <button class="qbtn g" data-v="50000">50K</button>
+        <button class="qbtn g" data-v="100000">100K</button>
+        <button class="qbtn g" data-v="500000">500K</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="flabel">Note <span style="color:var(--muted);font-size:9px">(optional)</span></label>
+      <input class="finput" id="addNote" placeholder="e.g. Salary, allowance…"/>
+    </div>
+
+    <div class="mfoot two">
+      <button class="btn-back2" id="cancelAdd">Cancel</button>
+      <button class="btn-grn" id="confirmAdd">Add Funds ＋</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SEND MONEY SHEET ═══════════════════════════════════════ -->
+<div class="overlay" id="sendOverlay">
+  <div class="sheet">
+    <div class="handle"></div>
+    <div class="steps"><div class="sdot" id="sd0"></div><div class="sdot" id="sd1"></div></div>
+
+    <!-- Step 0 -->
+    <div class="spanel" id="sp0">
+      <div class="sh-title">Receiver Details</div>
+      <div class="sh-sub">Enter the recipient's account information.</div>
+
+      <div class="field">
+        <label class="flabel">Receiver Name</label>
+        <input class="finput bf" id="sName" placeholder="e.g. Amara Okonkwo" autocomplete="off"/>
+      </div>
+
+      <div class="field">
+        <label class="flabel">Bank</label>
+        <button class="bank-btn" id="sBankBtn" type="button">
+          <span id="sBankIco" style="font-size:18px;display:flex;align-items:center;">🏦</span>
+          <span class="bl" id="sBankLbl">Select Bank</span>
+          <span class="cv">▼</span>
+        </button>
+        <div class="bank-drop" id="sBankDrop"></div>
+      </div>
+
+      <div class="field">
+        <label class="flabel">Account Number</label>
+        <input class="finput mono bf" id="sAccNum" placeholder="0000000000" maxlength="10" inputmode="numeric"/>
+      </div>
+
+      <div class="mfoot">
+        <button class="btn-blu" id="sNext">Continue →</button>
+      </div>
+    </div>
+
+    <!-- Step 1 -->
+    <div class="spanel" id="sp1">
+      <div class="sh-title">Amount & Note</div>
+      <div class="sh-sub">How much are you sending?</div>
+
+      <div style="display:flex;align-items:center;gap:10px;background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:16px;">
+        <div style="width:34px;height:34px;border-radius:9px;background:var(--blue-dim);color:var(--blue);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;" id="miniAv"></div>
+        <div>
+          <div style="font-size:.88rem;font-weight:700;color:var(--text);" id="miniNm"></div>
+          <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);" id="miniBk"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="flabel">Amount</label>
+        <div class="pfx-w">
+          <span class="pfx">₦</span>
+          <input type="number" class="finput mono bf" id="sAmt" placeholder="0.00" min="1" step="any"/>
+        </div>
+        <div class="quick">
+          <button class="qbtn b" data-v="5000">5K</button>
+          <button class="qbtn b" data-v="10000">10K</button>
+          <button class="qbtn b" data-v="50000">50K</button>
+          <button class="qbtn b" data-v="100000">100K</button>
+          <button class="qbtn b" data-v="500000">500K</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="flabel">Note <span style="color:var(--muted);font-size:9px">(optional)</span></label>
+        <input class="finput bf" id="sNote" placeholder="e.g. Rent, school fees, invoice…"/>
+      </div>
+
+      <div class="mfoot two">
+        <button class="btn-back2" id="sBack">← Back</button>
+        <button class="btn-blu" id="sSend">Send Money ↗</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ PROFILE PANEL ══════════════════════════════════════════ -->
+<div class="profile-overlay" id="profileOverlay">
+  <div class="profile-panel">
+
+    <div class="pp-header">
+      <button class="pp-close" id="ppClose">✕</button>
+      <div class="pp-avatar empty" id="ppAvatar">?</div>
+      <div class="pp-info">
+        <div class="pp-name" id="ppName">Set up your profile</div>
+        <div class="pp-bank" id="ppBank">No bank selected</div>
+        <div class="pp-acc" id="ppAcc"></div>
+      </div>
+    </div>
+
+    <div class="pp-body">
+      <div class="pp-section-lbl">My Account Info</div>
+
+      <div class="pp-field">
+        <label class="pp-flabel">Display Name</label>
+        <input class="pp-input" id="ppNameIn" placeholder="e.g. Chukwuemeka Bello" autocomplete="off"/>
+      </div>
+
+      <div class="pp-field">
+        <label class="pp-flabel">My Bank</label>
+        <button class="pp-bank-btn" id="ppBankBtn" type="button">
+          <span id="ppBankIco" style="font-size:18px;display:flex;align-items:center;">🏦</span>
+          <span class="pbl" id="ppBankLbl">Select your bank</span>
+          <span class="pcv">▼</span>
+        </button>
+        <div class="pp-bank-drop" id="ppBankDrop"></div>
+      </div>
+
+      <div class="pp-field">
+        <label class="pp-flabel">Account Number</label>
+        <input class="pp-input mono" id="ppAccIn" placeholder="0000000000" maxlength="10" inputmode="numeric"/>
+      </div>
+
+      <button class="pp-save" id="ppSave">Save Profile ✓</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">✓ Profile saved</div>
+
+<script>
+// ── BANKS ──────────────────────────────────────────────────────────────────────
+const BANK_LOGOS = {
+  "Access Bank": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iI2UzMTgzNyIvPjx0ZXh0IHg9IjIwIiB5PSIyMCIgZG9taW5hbnQtYmFzZWxpbmU9ImNlbnRyYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjIyIiBmaWxsPSIjZmZmZmZmIj5BQ0M8L3RleHQ+PC9zdmc+",
+  "Fidelity Bank": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iIzAwNWIyZSIvPjx0ZXh0IHg9IjIwIiB5PSIyMCIgZG9taW5hbnQtYmFzZWxpbmU9ImNlbnRyYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjIyIiBmaWxsPSIjZmZmZmZmIj5GSUQ8L3RleHQ+PC9zdmc+",
+  "First Bank": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iI2EwMTMyZCIvPjx0ZXh0IHg9IjIwIiB5PSIyMCIgZG9taW5hbnQtYmFzZWxpbmU9ImNlbnRyYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjIyIiBmaWxsPSIjZmZmZmZmIj5GQk48L3RleHQ+PC9zdmc+",
+  "First City Monument": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iIzc2MmE5MCIvPjx0ZXh0IHg9IjIwIiB5PSIyMCIgZG9taW5hbnQtYmFzZWxpbmU9ImNlbnRyYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjE3IiBmaWxsPSIjZmZmZmZmIj5GQ01CPC90ZXh0Pjwvc3ZnPg==",
+  "Guaranty Trust Bank": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iI2YyNjUyMiIvPjx0ZXh0IHg9IjIwIiB5PSIyMCIgZG9taW5hbnQtYmFzZWxpbmU9ImNlbnRyYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjIyIiBmaWxsPSIjZmZmZmZmIj5HVEI8L3RleHQ+PC9zdmc+",
+  "Kuda Bank": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iIzQwMTk2YiIvPjx0ZXh0IHg9IjIwIiB5PSIyMCIgZG9taW5hbnQtYmFzZWxpbmU9ImNlbnRyYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjE3IiBmaWxsPSIjZmZmZmZmIj5LVURBPC90ZXh0Pjwvc3ZnPg==",
+  "Opay": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iIzFhYWQyYSIvPjx0ZXh0IHg9IjIwIiB5PSIyMCIgZG9taW5hbnQtYmFzZWxpbmU9ImNlbnRyYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjE3IiBmaWxsPSIjZmZmZmZmIj5PUGF5PC90ZXh0Pjwvc3ZnPg==",
+  "Palmpay": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iIzA3YzE2MCIvPjx0ZXh0IHg9IjIwIiB5PSIyMCIgZG9taW5hbnQtYmFzZWxpbmU9ImNlbnRyYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjE3IiBmaWxsPSIjZmZmZmZmIj5QQUxNPC90ZXh0Pjwvc3ZnPg==",
+  "Polaris Bank": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iIzAwMzA4NyIvPjx0ZXh0IHg9IjIwIiB5PSIyMCIgZG9taW5hbnQtYmFzZWxpbmU9ImNlbnRyYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjIyIiBmaWxsPSIjZmZmZmZmIj5QT0w8L3RleHQ+PC9zdmc+",
+  "Sterling Bank": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iI2Q0MDAyYSIvPjx0ZXh0IHg9IjIwIiB5PSIyMCIgZG9taW5hbnQtYmFzZWxpbmU9ImNlbnRyYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjE3IiBmaWxsPSIjZmZmZmZmIj5TVExHPC90ZXh0Pjwvc3ZnPg==",
+  "United Bank for Africa": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iI2NjMDAwMCIvPjx0ZXh0IHg9IjIwIiB5PSIyMCIgZG9taW5hbnQtYmFzZWxpbmU9ImNlbnRyYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjIyIiBmaWxsPSIjZmZmZmZmIj5VQkE8L3RleHQ+PC9zdmc+",
+  "Union Bank": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iIzAwMjg2OCIvPjx0ZXh0IHg9IjIwIiB5PSIyMCIgZG9taW5hbnQtYmFzZWxpbmU9ImNlbnRyYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjIyIiBmaWxsPSIjZmZmZmZmIj5VQk48L3RleHQ+PC9zdmc+",
+  "VFD Microfinance": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iIzFhMWEyZSIvPjx0ZXh0IHg9IjIwIiB5PSIyMCIgZG9taW5hbnQtYmFzZWxpbmU9ImNlbnRyYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjIyIiBmaWxsPSIjZTk0NTYwIj5WRkQ8L3RleHQ+PC9zdmc+",
+  "Wema Bank": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iIzdiMmQ4YiIvPjx0ZXh0IHg9IjIwIiB5PSIyMCIgZG9taW5hbnQtYmFzZWxpbmU9ImNlbnRyYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjE3IiBmaWxsPSIjZmZmZmZmIj5XRU1BPC90ZXh0Pjwvc3ZnPg==",
+  "Zenith Bank": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iI2Q0MDAwMCIvPjx0ZXh0IHg9IjIwIiB5PSIyMCIgZG9taW5hbnQtYmFzZWxpbmU9ImNlbnRyYWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCxzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iODAwIiBmb250LXNpemU9IjIyIiBmaWxsPSIjZmZmZmZmIj5aRU48L3RleHQ+PC9zdmc+",
+};
+
+const BANKS = [
+  {name:"Access Bank", code:"044"},
+  {name:"Fidelity Bank", code:"070"},
+  {name:"First Bank", code:"011"},
+  {name:"First City Monument", code:"214"},
+  {name:"Guaranty Trust Bank", code:"058"},
+  {name:"Kuda Bank", code:"090"},
+  {name:"Opay", code:"100"},
+  {name:"Palmpay", code:"101"},
+  {name:"Polaris Bank", code:"076"},
+  {name:"Sterling Bank", code:"232"},
+  {name:"United Bank for Africa", code:"033"},
+  {name:"Union Bank", code:"032"},
+  {name:"VFD Microfinance", code:"566"},
+  {name:"Wema Bank", code:"035"},
+  {name:"Zenith Bank", code:"057"},
+];
+
+// Quick lookup: bankName -> logo URL
+
+function bankLogoImg(name, size=28){
+  const uri = BANK_LOGOS[name];
+  if(!uri) return `<span style="font-size:${size*0.6}px">🏦</span>`;
+  return `<img src="${uri}" style="width:${size}px;height:${size}px;border-radius:${Math.round(size*0.28)}px;object-fit:cover;display:block;flex-shrink:0;" alt="${name}"/>`;
+}
+
+// ── STATE ──────────────────────────────────────────────────────────────────────
+let state  = {balance:0, txs:[]};
+let profile= {name:'', bank:'', accNum:''};
+let sForm  = {name:'', bank:'', accNum:'', amount:0, note:''};
+let sBankOpen=false, ppBankOpen=false;
+
+// ── HELPERS ────────────────────────────────────────────────────────────────────
+const fmt = v => Number(v).toLocaleString('en-NG',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+function timeAgo(ts){
+  const d=Math.floor((Date.now()-ts)/1000);
+  if(d<5) return 'just now';
+  if(d<60) return `${d}s ago`;
+  if(d<3600) return `${Math.floor(d/60)}m ago`;
+  return `${Math.floor(d/3600)}h ago`;
+}
+
+function initials(name){
+  return name.trim().split(/\s+/).map(w=>w[0]).join('').substring(0,2).toUpperCase()||'?';
+}
+
+function shake(el){
+  el.classList.add('err');
+  el.animate([{transform:'translateX(0)'},{transform:'translateX(-6px)'},{transform:'translateX(5px)'},{transform:'translateX(-3px)'},{transform:'translateX(0)'}],{duration:300,easing:'ease-out'});
+  setTimeout(()=>el.classList.remove('err'),900);
+}
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+// ── AUTO-FIT BALANCE ───────────────────────────────────────────────────────────
+function fitBalance(){
+  const el=document.getElementById('balance');
+  const row=el.closest('.bal-row');
+  if(!row) return;
+  const cur=row.querySelector('.cur');
+  const maxW=row.parentElement.clientWidth-48-(cur.offsetWidth+4);
+  let size=48;
+  el.style.fontSize=size+'px';
+  while(el.scrollWidth>maxW && size>18){
+    size-=1;
+    el.style.fontSize=size+'px';
+  }
+  cur.style.fontSize=Math.max(13,Math.round(size*0.44))+'px';
+  cur.style.lineHeight='1';
+}
+
+// ── RENDER MAIN ────────────────────────────────────────────────────────────────
+function render(){
+  document.getElementById('balance').textContent=fmt(state.balance);
+  requestAnimationFrame(fitBalance);
+
+  const sub=document.getElementById('balanceSub');
+  const pend=state.txs.filter(t=>t.pending);
+  if(pend.length) sub.innerHTML=`<span class="pdot"></span>&nbsp; ${pend.length} transfer${pend.length>1?'s':''} pending…`;
+  else if(state.txs.length) sub.textContent=`Last updated ${timeAgo(state.txs.at(-1).ts)}`;
+  else sub.textContent='No recent activity';
+
+  document.getElementById('txCount').textContent=state.txs.length;
+
+  const list=document.getElementById('txList');
+  if(!state.txs.length){
+    list.innerHTML=`<div class="tx-empty"><div class="tx-empty-ico">💳</div><div>No activity yet</div></div>`;
+    return;
+  }
+
+  list.innerHTML='';
+  state.txs.slice().reverse().forEach((tx,i)=>{
+    const el=document.createElement('div');
+    el.className='tx-item';
+    const isSend=tx.type==='send';
+    const ip=tx.pending;
+    const icoCls=ip?'ico-pend':(isSend?'ico-send':'ico-add');
+    const icoContent = ip ? '⏳' : (isSend
+      ? `<div style="width:100%;height:100%;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;">${bankLogoImg(tx.bank,36)}</div>`
+      : initials(tx.name||'ME'));
+
+    const subLine = isSend
+      ? `<div style="display:flex;align-items:center;gap:5px;" class="tx-sub2">${bankLogoImg(tx.bank,14)} ${tx.bank}</div>`
+      : `<div class="tx-sub2">${tx.note||'Balance top-up'}</div>`;
+    const hasNote=tx.note&&tx.note.trim();
+
+    el.innerHTML=`
+      <div class="tx-row">
+        <div class="tx-ico ${icoCls}" style="${(!ip && isSend)?'padding:0;overflow:hidden;':''}">${icoContent}</div>
+        <div class="tx-body">
+          <div class="tx-name">${isSend?tx.name:'Funds Added'}</div>
+          ${subLine}
+        </div>
+        <div class="tx-right">
+          <div class="tx-amt ${isSend?'debit':'credit'}">${isSend?'−':'+'}₦${fmt(tx.amount)}</div>
+          <div class="tx-st ${ip?'pend':'done'}">${ip?'Processing…':'Done · '+timeAgo(tx.ts)}</div>
+        </div>
+      </div>
+      <div class="tx-detail" id="txd${i}">
+        <div class="tx-detail-inner">
+          <div><div class="dl">Type</div><div class="dv">${isSend?'Outgoing Transfer':'Incoming Deposit'}</div></div>
+          <div><div class="dl">Status</div><div class="dv">${ip?'⏳ Pending':'✓ Completed'}</div></div>
+          ${isSend?`<div><div class="dl">Account</div><div class="dv">${tx.accNum}</div></div><div><div class="dl">Bank</div><div class="dv" style="display:flex;align-items:center;gap:5px;">${bankLogoImg(tx.bank,14)} ${tx.bank}</div></div>`:''}
+          ${hasNote?`<div class="dfull"><div class="dl">Note</div><div class="dv">${tx.note}</div></div>`:''}
+        </div>
+      </div>`;
+
+    el.addEventListener('click',()=>document.getElementById(`txd${i}`).classList.toggle('open'));
+    list.appendChild(el);
+  });
+}
+
+// ── RENDER PROFILE HEADER ──────────────────────────────────────────────────────
+function renderProfile(){
+  const hasProfile=profile.name||profile.bank;
+
+  // Trigger button
+  const av=document.getElementById('triggerAvatar');
+  const dot=document.getElementById('profileDot');
+  if(profile.name){
+    av.textContent=initials(profile.name);
+    av.classList.remove('empty');
+    dot.classList.add('visible');
+  } else {
+    av.innerHTML=`<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+    av.classList.add('empty');
+    dot.classList.remove('visible');
+  }
+
+  // Panel header preview
+  const ppAv=document.getElementById('ppAvatar');
+  if(profile.name){
+    ppAv.textContent=initials(profile.name);
+    ppAv.classList.remove('empty');
+  } else {
+    ppAv.textContent='?';
+    ppAv.classList.add('empty');
+  }
+
+  document.getElementById('ppName').textContent=profile.name||'Set up your profile';
+  document.getElementById('ppBank').textContent=profile.bank||'No bank selected';
+  document.getElementById('ppAcc').textContent=profile.accNum?`Acct: ${profile.accNum}`:'';
+}
+
+// ── PROFILE PANEL ──────────────────────────────────────────────────────────────
+let ppBankSel='';
+
+// Build profile bank dropdown
+const ppDrop=document.getElementById('ppBankDrop');
+BANKS.forEach(b=>{
+  const item=document.createElement('div');
+  item.className='pp-bitem';
+  item.innerHTML=`<div class="blogo">${bankLogoImg(b.name,28)}</div><span class="bn">${b.name}</span><span class="bc">${b.code}</span>`;
+  item.addEventListener('click',()=>{
+    ppBankSel=b.name;
+    document.getElementById('ppBankLbl').textContent=b.name;
+    document.getElementById('ppBankLbl').classList.add('on');
+    // Show logo on the trigger button
+    document.getElementById('ppBankIco').innerHTML=bankLogoImg(b.name,22);
+    document.querySelectorAll('.pp-bitem').forEach(i=>i.classList.remove('sel'));
+    item.classList.add('sel');
+    ppDrop.classList.remove('open');
+    ppBankOpen=false;
+  });
+  ppDrop.appendChild(item);
+});
+
+document.getElementById('ppBankBtn').addEventListener('click',()=>{
+  ppBankOpen=!ppBankOpen;
+  ppDrop.classList.toggle('open',ppBankOpen);
+});
+
+// Open profile
+document.getElementById('profileTrigger').addEventListener('click',()=>{
+  // Pre-fill inputs from saved profile
+  document.getElementById('ppNameIn').value=profile.name;
+  document.getElementById('ppAccIn').value=profile.accNum;
+  if(profile.bank){
+    document.getElementById('ppBankLbl').textContent=profile.bank;
+    document.getElementById('ppBankLbl').classList.add('on');
+    document.getElementById('ppBankIco').innerHTML=bankLogoImg(profile.bank,22);
+    ppBankSel=profile.bank;
+    document.querySelectorAll('.pp-bitem').forEach(i=>{
+      i.classList.toggle('sel', i.querySelector('.bn').textContent===profile.bank);
+    });
+  }
+  document.getElementById('profileOverlay').classList.add('open');
+});
+
+document.getElementById('ppClose').addEventListener('click',()=>{
+  document.getElementById('profileOverlay').classList.remove('open');
+  ppBankOpen=false;
+  ppDrop.classList.remove('open');
+});
+
+document.getElementById('profileOverlay').addEventListener('click',e=>{
+  if(e.target===document.getElementById('profileOverlay'))
+    document.getElementById('profileOverlay').classList.remove('open');
+});
+
+// Save profile
+document.getElementById('ppSave').addEventListener('click',()=>{
+  const name=document.getElementById('ppNameIn').value.trim();
+  const acc =document.getElementById('ppAccIn').value.trim();
+  if(!name && !ppBankSel && !acc){ showToast('Nothing to save'); return; }
+  profile.name=name;
+  profile.bank=ppBankSel;
+  profile.accNum=acc;
+  renderProfile();
+  updateSendBtn();
+  document.getElementById('profileOverlay').classList.remove('open');
+  showToast('✓ Profile saved');
+});
+
+// ── ADD FUNDS ──────────────────────────────────────────────────────────────────
+const addOv=document.getElementById('addOverlay');
+
+document.getElementById('openAdd').addEventListener('click',()=>{
+  document.getElementById('addAmt').value='';
+  document.getElementById('addNote').value='';
+  addOv.classList.add('open');
+  setTimeout(()=>document.getElementById('addAmt').focus(),80);
+});
+
+document.getElementById('cancelAdd').addEventListener('click',()=>addOv.classList.remove('open'));
+addOv.addEventListener('click',e=>{if(e.target===addOv)addOv.classList.remove('open');});
+
+document.querySelectorAll('#addOverlay .qbtn').forEach(b=>{
+  b.addEventListener('click',()=>document.getElementById('addAmt').value=b.dataset.v);
+});
+
+document.getElementById('confirmAdd').addEventListener('click',()=>{
+  const el=document.getElementById('addAmt');
+  const val=parseFloat(el.value);
+  if(!val||val<=0){shake(el);return;}
+  const note=document.getElementById('addNote').value.trim();
+  const tx={type:'add',amount:val,note,name:profile.name||'Self',pending:true,ts:Date.now()};
+  state.txs.push(tx);
+  addOv.classList.remove('open');
+  render();
+  const bEl=document.getElementById('balance');
+  setTimeout(()=>{
+    tx.pending=false;
+    state.balance+=val;
+    bEl.classList.add('pulse');
+    render();
+    setTimeout(()=>bEl.classList.remove('pulse'),1200);
+  },3000);
+});
+
+// ── SEND MONEY ─────────────────────────────────────────────────────────────────
+const sendOv=document.getElementById('sendOverlay');
+
+// Build send bank dropdown
+const sDrop=document.getElementById('sBankDrop');
+BANKS.forEach(b=>{
+  const item=document.createElement('div');
+  item.className='bitem';
+  item.innerHTML=`<div class="blogo">${bankLogoImg(b.name,28)}</div><span class="bn">${b.name}</span><span class="bc">${b.code}</span>`;
+  item.addEventListener('click',()=>{
+    sForm.bank=b.name;
+    document.getElementById('sBankLbl').textContent=b.name;
+    document.getElementById('sBankLbl').classList.add('on');
+    // Show logo on the trigger button
+    document.getElementById('sBankIco').innerHTML=bankLogoImg(b.name,22);
+    document.querySelectorAll('#sBankDrop .bitem').forEach(i=>i.classList.remove('sel'));
+    item.classList.add('sel');
+    sDrop.classList.remove('open');
+    sBankOpen=false;
+  });
+  sDrop.appendChild(item);
+});
+
+document.getElementById('sBankBtn').addEventListener('click',()=>{
+  sBankOpen=!sBankOpen;
+  sDrop.classList.toggle('open',sBankOpen);
+});
+
+document.addEventListener('click',e=>{
+  if(sBankOpen && !e.target.closest('#sBankBtn') && !e.target.closest('#sBankDrop')){
+    sDrop.classList.remove('open'); sBankOpen=false;
+  }
+  if(ppBankOpen && !e.target.closest('#ppBankBtn') && !e.target.closest('#ppBankDrop')){
+    ppDrop.classList.remove('open'); ppBankOpen=false;
+  }
+});
+
+function setSStep(n){
+  document.querySelectorAll('.spanel').forEach((p,i)=>p.classList.toggle('on',i===n));
+  ['sd0','sd1'].forEach((id,i)=>{
+    const d=document.getElementById(id);
+    d.className='sdot';
+    if(i===n) d.classList.add('ab');
+    if(i<n)   d.classList.add('db');
+  });
+}
+
+function isProfileComplete(){
+  return !!(profile.name && profile.bank && profile.accNum);
+}
+
+function updateSendBtn(){
+  const btn=document.getElementById('openSend');
+  const ico=document.getElementById('sendIco');
+  const lbl=document.getElementById('sendBtnLabel');
+  if(isProfileComplete()){
+    btn.classList.remove('locked');
+    ico.textContent='↗';
+    lbl.textContent='Send Money';
+  } else {
+    btn.classList.add('locked');
+    ico.textContent='🔒';
+    lbl.textContent='Send Money';
+  }
+}
+
+document.getElementById('openSend').addEventListener('click',()=>{
+  if(!isProfileComplete()){
+    // Shake the profile trigger to hint user
+    const pt=document.getElementById('profileTrigger');
+    pt.animate([
+      {transform:'translateX(0)'},{transform:'translateX(-5px)'},
+      {transform:'translateX(5px)'},{transform:'translateX(-3px)'},
+      {transform:'translateX(0)'}
+    ],{duration:320,easing:'ease-out'});
+    showToast('⚙️ Set up your profile first to send money');
+    return;
+  }
+  sForm={name:'',bank:'',accNum:'',amount:0,note:''};
+  document.getElementById('sName').value='';
+  document.getElementById('sAccNum').value='';
+  document.getElementById('sAmt').value='';
+  document.getElementById('sNote').value='';
+  document.getElementById('sBankLbl').textContent='Select Bank';
+  document.getElementById('sBankLbl').classList.remove('on');
+  document.querySelectorAll('#sBankDrop .bitem').forEach(i=>i.classList.remove('sel'));
+  sDrop.classList.remove('open'); sBankOpen=false;
+  setSStep(0);
+  sendOv.classList.add('open');
+  setTimeout(()=>document.getElementById('sName').focus(),80);
+});
+
+sendOv.addEventListener('click',e=>{if(e.target===sendOv)sendOv.classList.remove('open');});
+
+document.getElementById('sNext').addEventListener('click',()=>{
+  const nEl=document.getElementById('sName');
+  const aEl=document.getElementById('sAccNum');
+  const bBtn=document.getElementById('sBankBtn');
+  sForm.name=nEl.value.trim();
+  sForm.accNum=aEl.value.trim();
+  let ok=true;
+  if(!sForm.name){shake(nEl);ok=false;}
+  if(!sForm.bank){shake(bBtn);ok=false;}
+  if(!sForm.accNum||sForm.accNum.length<10){shake(aEl);ok=false;}
+  if(!ok)return;
+  document.getElementById('miniAv').textContent=initials(sForm.name);
+  document.getElementById('miniNm').textContent=sForm.name;
+  document.getElementById('miniBk').textContent=`${sForm.bank} · ${sForm.accNum}`;
+  setSStep(1);
+  setTimeout(()=>document.getElementById('sAmt').focus(),80);
+});
+
+document.getElementById('sBack').addEventListener('click',()=>setSStep(0));
+
+document.querySelectorAll('#sendOverlay .qbtn').forEach(b=>{
+  b.addEventListener('click',()=>document.getElementById('sAmt').value=b.dataset.v);
+});
+
+document.getElementById('sSend').addEventListener('click',()=>{
+  const aEl=document.getElementById('sAmt');
+  const val=parseFloat(aEl.value);
+  if(!val||val<=0){shake(aEl);return;}
+  if(val>state.balance){
+    aEl.classList.add('err');
+    const old=aEl.placeholder;
+    aEl.placeholder='Insufficient balance';
+    aEl.value='';
+    setTimeout(()=>{aEl.classList.remove('err');aEl.placeholder=old;},1400);
+    return;
+  }
+  sForm.amount=val;
+  sForm.note=document.getElementById('sNote').value.trim();
+  const tx={type:'send',...sForm,pending:true,ts:Date.now()};
+  state.txs.push(tx);
+  sendOv.classList.remove('open');
+  render();
+  setTimeout(()=>{
+    tx.pending=false;
+    state.balance-=tx.amount;
+    render();
+  },3000);
+});
+
+// ── RESET ──────────────────────────────────────────────────────────────────────
+document.getElementById('resetBtn').addEventListener('click',()=>{
+  if(!state.txs.length&&state.balance===0)return;
+  if(!confirm('Clear all data? This cannot be undone.'))return;
+  state={balance:0,txs:[]};
+  render();
+});
+
+// ── ANIMATED GRADIENT MESH BACKGROUND ─────────────────────────────────────────
+(function(){
+  const canvas = document.getElementById('meshCanvas');
+  const ctx    = canvas.getContext('2d');
+
+  // Orb definitions — position (%), size, color, speed
+  const orbs = [
+    { x:0.15, y:0.20, r:0.45, color:[0,245,122],   vx:0.00018, vy:0.00012 },
+    { x:0.80, y:0.75, r:0.50, color:[59,158,255],   vx:-0.00015,vy:-0.00010 },
+    { x:0.55, y:0.10, r:0.38, color:[140,60,255],   vx:0.00012, vy:0.00020 },
+    { x:0.10, y:0.80, r:0.42, color:[255,100,50],   vx:0.00020, vy:-0.00014 },
+    { x:0.85, y:0.25, r:0.36, color:[0,200,255],    vx:-0.00013,vy:0.00018  },
+    { x:0.45, y:0.55, r:0.30, color:[255,210,0],    vx:0.00016, vy:-0.00012 },
+  ];
+
+  function resize(){
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  let t = 0;
+
+  function draw(){
+    const W = canvas.width, H = canvas.height;
+
+    // Dark base
+    ctx.fillStyle = '#060810';
+    ctx.fillRect(0, 0, W, H);
+
+    // Draw each orb as a radial gradient blob
+    orbs.forEach(o => {
+      // Drift with wraparound
+      o.x += o.vx;
+      o.y += o.vy;
+      if(o.x < -0.2) o.x = 1.2;
+      if(o.x >  1.2) o.x = -0.2;
+      if(o.y < -0.2) o.y = 1.2;
+      if(o.y >  1.2) o.y = -0.2;
+
+      const cx = o.x * W;
+      const cy = o.y * H;
+      const r  = o.r * Math.max(W, H);
+
+      // Pulse radius slightly
+      const pulse = 1 + 0.06 * Math.sin(t * 0.7 + o.x * 10);
+
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * pulse);
+      const [R,G,B] = o.color;
+      grad.addColorStop(0,   `rgba(${R},${G},${B},0.18)`);
+      grad.addColorStop(0.4, `rgba(${R},${G},${B},0.07)`);
+      grad.addColorStop(1,   `rgba(${R},${G},${B},0)`);
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * pulse, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    });
+
+    // Subtle noise vignette overlay
+    const vig = ctx.createRadialGradient(W/2,H/2,H*0.1, W/2,H/2,H*0.85);
+    vig.addColorStop(0, 'rgba(0,0,0,0)');
+    vig.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, W, H);
+
+    t += 0.012;
+    requestAnimationFrame(draw);
+  }
+
+  draw();
+})();
+
+// ── INIT ───────────────────────────────────────────────────────────────────────
+render();
+renderProfile();
+updateSendBtn();
+window.addEventListener('resize', fitBalance);
+setInterval(render,30000);
+</script>
+</body>
+</html>
