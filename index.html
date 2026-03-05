@@ -838,9 +838,10 @@ const BANKS = [
 
 function bankLogoImg(name, size=28){
   const uri = BANK_LOGOS[name];
-  if(!uri) return `<span style="font-size:${size*0.6}px">🏦</span>`;
-  return `<img src="${uri}" style="width:${size}px;height:${size}px;border-radius:${Math.round(size*0.28)}px;object-fit:cover;display:block;flex-shrink:0;" alt="${name}"/>`;
-}
+  return `<img src="${uri}" 
+    style="width:${size}px;height:${size}px;
+    border-radius:8px;object-fit:cover;">`;
+  }
 
 // ── STATE ──────────────────────────────────────────────────────────────────────
 let state  = {balance:0, txs:[]};
